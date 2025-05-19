@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Smart To-Do List</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #eef2f3;
+      margin: 0;
+      padding: 2rem;
+    }
+    .container {
+      max-width: 600px;
+      margin: auto;
+      background: white;
+      padding: 2rem;
+      border-radius: 10px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    input, select, button {
+      padding: 10px;
+      font-size: 1rem;
+      margin-top: 10px;
+      width: 100%;
+      box-sizing: border-box;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+    }
+    button {
+      background-color: #4CAF50;
+      color: white;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+    button:hover {
+      background-color: #45a049;
+    }
+    ul {
+      list-style: none;
+      padding: 0;
+      margin-top: 1rem;
+    }
+    li {
+      background: #d7f0dd;
+      margin: 10px 0;
+      padding: 15px;
+      border-radius: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      transition: transform 0.2s;
+    }
+    li:hover {
+      transform: scale(1.01);
+    }
+    .task-info {
+      flex-grow: 1;
+      font-size: 1rem;
+      line-height: 1.4;
+      cursor: pointer;
+    }
+    .completed {
+      text-decoration: line-through;
+      color: gray;
+    }
+    .delete-btn {
+      background: #4CAF50;
+      border: none;
+      color: white;
+      font-size: 1.2rem;
+      padding: 10px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+    .delete-btn:hover {
+      background: #388e3c;
+    }
+    .popup {
+      position: fixed;
+      bottom: 10px;
+      right: 10px;
+      background: #222;
+      color: #fff;
+      padding: 15px;
+      border-radius: 5px;
+      display: none;
+      z-index: 999;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>📋 Scheduled To-Do List</h2>
+    <input id="taskInput" type="text" placeholder="Enter task">
+    <input id="dateInput" type="date">
+    <input id="timeInput" type="time">
+    <select id="ampmSelect">
+      <option value="AM">AM</option>
+      <option value="PM">PM</option>
+    </select>
+    <button onclick="addTask()">Add Task</button>
+    <ul id="taskList"></ul>
+  </div>
+
+  <div id="popup" class="popup"></div>
+
+  <script>
+    async function loadTasks() {
+      const res = await fetch('/tasks');
+      const tasks = await res.json();
+      const now = new Date();
+      const list = document.getElementById('taskList');
+      list.innerHTML = '';
+
+      tasks.forEach((item, index) => {
+        const itemDate = new Date(`${item.date}T${item.time}`);
+        if (itemDate >= now) {
+          const li = document.createElement('li');
+
+          const infoDiv = document.createElement('div');
+          infoDiv.className = 'task-info';
+          if (item.completed) infoDiv.classList.add('completed');
+
+          infoDiv.innerHTML = `<strong>${item.date} ${formatTime(item.time, item.ampm)}</strong><br>${item.task}`;
+          infoDiv.onclick = () => toggleComplete(index);
+
+          const delBtn = document.createElement('button');
+          delBtn.innerHTML = '🗑️';
+          delBtn.className = 'delete-btn';
+          delBtn.onclick = () => deleteTask(index);
+
+          li.appendChild(infoDiv);
+          li.appendChild(delBtn);
+          list.appendChild(li);
+        }
+      });
+    }
+
+    function formatTime(time, ampm) {
+      let [h, m] = time.split(':');
+      h = parseInt(h);
+      if (ampm === 'PM' && h < 12) h += 12;
+      if (ampm === 'AM' && h === 12) h = 0;
+      const hour12 = ((h % 12) || 12);
+      const suffix = h >= 12 ? 'PM' : 'AM';
+      return `${hour12}:${m} ${suffix}`;
+    }
+
+    async function addTask() {
+      const task = document.getElementById('taskInput').value;
+      const date = document.getElementById('dateInput').value;
+      const time = document.getElementById('timeInput').value;
+      const ampm = document.getElementById('ampmSelect').value;
+
+      if (!task || !time || !date) return alert("Fill all fields");
+
+      await fetch('/tasks', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ task, date, time, ampm })
+      });
+
+      document.getElementById('taskInput').value = '';
+      loadTasks();
+    }
+
+    async function deleteTask(index) {
+      await fetch(`/tasks/${index}`, { method: 'DELETE' });
+      loadTasks();
+    }
+
+    async function toggleComplete(index) {
+      await fetch(`/tasks/complete/${index}`, { method: 'PATCH' });
+      loadTasks();
+    }
+
+    async function checkReminders() {
+      const res = await fetch('/tasks');
+      const tasks = await res.json();
+      const now = new Date();
+      const nowDate = now.toISOString().split('T')[0];
+      const nowTime = now.toTimeString().slice(0, 5);
+
+      tasks.forEach(task => {
+        if (task.date === nowDate && task.time === nowTime && !task.completed) {
+          showPopup(`🔔 Reminder: ${task.task}`);
+        }
+      });
+    }
+
+    function showPopup(message) {
+      const popup = document.getElementById('popup');
+      popup.textContent = message;
+      popup.style.display = 'block';
+      setTimeout(() => popup.style.display = 'none', 5000);
+    }
+
+    loadTasks();
+    setInterval(checkReminders, 60000);
+  </script>
+</body>
+</html>
